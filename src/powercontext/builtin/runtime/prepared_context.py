@@ -34,6 +34,7 @@ from powercontext.builtin.runtime.prepared_code import (
     PreparedCodeCandidate,
     assemble_code,
 )
+from powercontext.builtin.runtime.prepared_evidence import EvidenceCandidate, select_evidence
 from powercontext.builtin.runtime.prepared_text import (
     TRUST_POLICY,
     ContextTextItem,
@@ -106,6 +107,7 @@ class PreparedContextBuild:
     origins: tuple[PreparedContextOrigin, ...]
     omissions: PreparedContextOmissions = PreparedContextOmissions()
     code_origins: tuple[CodeEvidenceRef, ...] = ()
+    fragments: tuple[PreparedContextFragment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,19 @@ class MemoryEntryAddress:
 
 
 PreparedContextOrigin = MemoryCitation | ArtifactRef | MemoryEntryAddress | ArtifactAddress
+
+
+@dataclass(frozen=True)
+class PreparedContextFragment:
+    """One verbatim, half-open character range ``[start, end)`` of an exact Memory entry version.
+
+    ``text`` always equals ``entry.text[start:end]`` for the entry identified by ``address``.
+    """
+
+    address: MemoryEntryAddress
+    start: int
+    end: int
+    text: str
 
 
 @dataclass(frozen=True)
@@ -211,6 +226,10 @@ class PreparedContextBuilder:
         profile_candidates: Sequence[PreparedProfileCandidate] = (),
         code_candidates: Sequence[PreparedCodeCandidate] = (),
     ) -> PreparedContextBuild:
+        if request.evidence_selection:
+            return self._build_evidence(
+                request=request, current_scope_id=current_scope_id, memory_candidates=memory_candidates
+            )
         if request.include_code:
 
             def historical(history_request: PrepareContextRequest, entries: int) -> PreparedContextBuild:
@@ -254,6 +273,67 @@ class PreparedContextBuilder:
             context=PreparedContext(status="ready", content=content, content_bytes=content_bytes),
             origins=origins,
             omissions=omissions,
+        )
+
+    def _build_evidence(
+        self,
+        *,
+        request: PrepareContextRequest,
+        current_scope_id: str | None,
+        memory_candidates: Sequence[PreparedMemoryCandidates],
+    ) -> PreparedContextBuild:
+        """Deliver query-relevant verbatim fragments of the Memory candidates (evidence mode)."""
+
+        if sum(len(candidates.hits) for candidates in memory_candidates) > self.memory_candidate_limit:
+            raise PreparedContextInvariantError("memory-candidate-limit")
+        candidates: list[EvidenceCandidate] = []
+        seen: set[tuple[str, str, str]] = set()
+        for group in memory_candidates:
+            if group.hits and group.memory_ref is None:
+                raise PreparedContextInvariantError("memory-ref-missing")
+            scope_id = group.scope_id or current_scope_id
+            for hit in group.hits:
+                if hit.memory_ref != group.memory_ref:
+                    raise PreparedContextInvariantError("memory-ref-mismatch")
+                if not hit.entry_id.strip() or not hit.entry_version_id.strip() or not hit.text.strip():
+                    continue
+                if not scope_id:
+                    raise PreparedContextInvariantError("evidence-scope-missing")
+                key = (scope_id, hit.entry_id, hit.entry_version_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(
+                    EvidenceCandidate(
+                        memory=ArtifactAddress(scope_id=scope_id, artifact=hit.memory_ref),
+                        entry_id=hit.entry_id,
+                        entry_version_id=hit.entry_version_id,
+                        text=hit.text,
+                    )
+                )
+        content, spans = select_evidence(query=request.query, max_bytes=request.max_bytes, candidates=candidates)
+        if content is None:
+            return PreparedContextBuild(context=self.empty(), origins=())
+        fragments = tuple(
+            PreparedContextFragment(
+                address=MemoryEntryAddress(
+                    memory=span.candidate.memory,
+                    entry_id=span.candidate.entry_id,
+                    entry_version_id=span.candidate.entry_version_id,
+                ),
+                start=span.start,
+                end=span.end,
+                text=span.text,
+            )
+            for span in spans
+        )
+        content_bytes = len(content.encode("utf-8"))
+        if content_bytes > request.max_bytes:
+            raise PreparedContextInvariantError("output-budget")
+        return PreparedContextBuild(
+            context=PreparedContext(status="ready", content=content, content_bytes=content_bytes),
+            origins=tuple(fragment.address for fragment in fragments),
+            fragments=fragments,
         )
 
     def probe_budget(
