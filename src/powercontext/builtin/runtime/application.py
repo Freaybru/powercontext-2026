@@ -29,6 +29,12 @@ from typing import TYPE_CHECKING, Any, Protocol
 from pydantic import BaseModel, JsonValue, ValidationError
 
 from powercontext._logging import log_safely
+from powercontext.builtin.runtime.context_pack import (
+    ContextPack,
+    ContextPackDelta,
+    ContextPackError,
+    chunk_against_base,
+)
 from powercontext.artifacts import ArtifactRef
 from powercontext.builtin.artifacts.experience import (
     EXPERIENCE_INCUBATION_WINDOW_LIMIT,
@@ -846,6 +852,32 @@ class ScopedContextApplication:
             if authorize_scopes is not None:
                 await authorize_scopes((self.scope_id, *scope.context_references))
             return await self._prepare(request, scope)
+
+    async def prepare_incremental(
+        self,
+        request: PrepareContextRequest,
+        /,
+        base_pack: ContextPack | None = None,
+        *,
+        authorize_scopes: Callable[[tuple[str, ...]], Awaitable[None]] | None = None,
+    ) -> ContextPack | ContextPackDelta:
+        """Prepare context like ``prepare`` and return it as a full pack or a delta against ``base_pack``.
+
+        Without a base the full :class:`ContextPack` is returned. With a valid base the target is
+        chunked so that it reuses the longest run of leading base chunks, and only the delta is
+        returned; the receiver rebuilds exactly ``prepare(request).content`` from serialized bytes.
+        """
+
+        if base_pack is not None:
+            if not isinstance(base_pack, ContextPack):
+                raise ContextPackError("base_pack must be a ContextPack")
+            # Re-verify a caller-supplied base before using it as a delta anchor.
+            base_pack = ContextPack.from_bytes(base_pack.to_bytes())
+        prepared = await self.prepare(request, authorize_scopes=authorize_scopes)
+        if base_pack is None:
+            return ContextPack.from_content(prepared.content)
+        target = ContextPack.build(chunk_against_base(prepared.content, base_pack))
+        return ContextPackDelta.between(base_pack, target)
 
     async def _prepare(self, request: PrepareContextRequest, scope: ScopeDescriptor, /) -> PreparedContext:
         build, effort = await self._prepare_build(request, scope)
