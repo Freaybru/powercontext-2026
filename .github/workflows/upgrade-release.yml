@@ -1,0 +1,220 @@
+name: Parallel installed-release upgrade acceptance
+
+on:
+  workflow_call:
+    inputs:
+      selection:
+        description: full, automatic, or seekdb-code; manual Code cases do not gate publication
+        type: string
+        default: full
+      release:
+        description: Enforce release metadata and expose accepted publication artifacts
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare upgrade artifacts and matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      matrix: ${{ steps.prepare.outputs.matrix }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Verify package version from Release tag
+        if: inputs.release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import subprocess
+
+          release_tag = os.environ["RELEASE_TAG"]
+          if release_tag.startswith("powercontext-v"):
+              release_version = release_tag.removeprefix("powercontext-v")
+          else:
+              release_version = release_tag.removeprefix("v")
+          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc)[0-9]+)?", release_version):
+              raise SystemExit(
+                  "Release tag must use X.Y.Z with optional aN, bN, or rcN suffix and "
+                  "optional v or powercontext-v prefix (for example, powercontext-v1.1.0)"
+              )
+
+          package_version = subprocess.check_output(
+              ["uvx", "--from", "hatchling", "--with", "hatch-vcs", "hatchling", "version"],
+              text=True,
+          ).strip()
+          if package_version != release_version:
+              raise SystemExit(
+                  f"Release tag version {release_version!r} does not match VCS version {package_version!r}"
+              )
+          PY
+
+      - name: Set up website tools
+        if: inputs.release
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+
+      - name: Cache website dependencies
+        if: inputs.release
+        uses: ./.github/actions/cache-pnpm
+        with:
+          working-directory: website
+          cache-dependency-glob: website/pnpm-lock.yaml
+
+      - name: Verify synchronized release references and release notes
+        if: inputs.release
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: make release-check
+
+      - name: Verify upgrade policy and gate regressions
+        run: |
+          make upgrade-policy-check
+          uv run pytest -q tests/test_upgrade_release_gate.py tests/test_upgrade_publication.py
+
+      - name: Build release distributions
+        run: |
+          uv build --out-dir dist
+          uvx --from twine twine check dist/*
+
+      - name: Freeze distributions and resolve the source matrix once
+        id: prepare
+        env:
+          RELEASE: ${{ inputs.release }}
+          SELECTION: ${{ inputs.selection }}
+        run: |
+          args=()
+          if [ "$RELEASE" = true ]; then
+            args+=(--release --release-event "$GITHUB_EVENT_PATH")
+          fi
+          uv run python scripts/parallel_upgrade_release_gate.py prepare \
+            --output "$RUNNER_TEMP/upgrade-prepared" --selection "$SELECTION" "${args[@]}"
+
+      - name: Share the exact prepared inputs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: upgrade-prepared
+          path: |
+            ${{ runner.temp }}/upgrade-prepared/inputs/
+            ${{ runner.temp }}/upgrade-prepared/plan.json
+            ${{ runner.temp }}/upgrade-prepared/sdist-build.log
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+  cases:
+    name: Upgrade ${{ matrix.source_version }} / ${{ matrix.backend }} / ${{ matrix.configuration }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      PC_UPGRADE_OCEANBASE_URL: mysql+aoceanbase://root%40test:powercontext-e2e@127.0.0.1:2881/pc_upgrade_test?charset=utf8mb4
+      PC_UPGRADE_OCEANBASE_FRESH_URL: mysql+aoceanbase://root%40test:powercontext-e2e@127.0.0.1:2881/pc_upgrade_fresh?charset=utf8mb4
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+      - name: Download the shared prepared inputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: upgrade-prepared
+          path: ${{ runner.temp }}/upgrade-prepared/
+      - name: Start the isolated upgrade OceanBase environment
+        if: matrix.backend == 'oceanbase'
+        uses: ./.github/actions/setup-upgrade-oceanbase
+      - name: Run this configuration exactly once
+        env:
+          CASE_INDEX: ${{ matrix.index }}
+        run: >-
+          uv run python scripts/parallel_upgrade_release_gate.py case
+          --prepared "$RUNNER_TEMP/upgrade-prepared"
+          --index "$CASE_INDEX"
+          --output "$RUNNER_TEMP/upgrade-case"
+      - name: Preserve OceanBase diagnostics and stop the owned container
+        if: always() && matrix.backend == 'oceanbase'
+        run: |
+          mkdir -p "$RUNNER_TEMP/upgrade-case"
+          docker logs upgrade-oceanbase > "$RUNNER_TEMP/upgrade-case/oceanbase.log" 2>&1 || true
+          docker inspect --format '{{json .State}}' upgrade-oceanbase \
+            > "$RUNNER_TEMP/upgrade-case/oceanbase-state.json" 2>&1 || true
+          docker rm --force upgrade-oceanbase
+      - name: Preserve this configuration's evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: upgrade-case-${{ matrix.index }}
+          path: ${{ runner.temp }}/upgrade-case/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+  collect:
+    name: Verify the selected upgrade matrix
+    needs: [prepare, cases]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+      - name: Download the shared prepared inputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: upgrade-prepared
+          path: ${{ runner.temp }}/upgrade-prepared/
+      - name: Download disjoint case reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: upgrade-case-*
+          path: ${{ runner.temp }}/upgrade-case-reports/
+      - name: Require all selected evidence for the exact prepared distributions
+        run: >-
+          uv run python scripts/parallel_upgrade_release_gate.py collect
+          --prepared "$RUNNER_TEMP/upgrade-prepared"
+          --reports "$RUNNER_TEMP/upgrade-case-reports"
+          --output "$RUNNER_TEMP/upgrade-release-evidence"
+      - name: Require successful provisioning, execution, cleanup and evidence upload
+        env:
+          CASE_JOBS_RESULT: ${{ needs.cases.result }}
+        run: test "$CASE_JOBS_RESULT" = success
+      - name: Preserve the aggregate verdict
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: upgrade-release-evidence
+          path: ${{ runner.temp }}/upgrade-release-evidence/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+      - name: Upload accepted release distributions
+        if: success() && inputs.release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-dists
+          path: ${{ runner.temp }}/upgrade-release-evidence/validated-dist/*
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30

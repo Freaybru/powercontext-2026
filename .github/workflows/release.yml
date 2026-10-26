@@ -13,68 +13,10 @@ concurrency:
 
 jobs:
   release-build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up the environment
-        uses: ./.github/actions/setup-python-env
-
-      - name: Verify package version from Release tag
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          python - <<'PY'
-          import os
-          import re
-          import subprocess
-
-          release_tag = os.environ["RELEASE_TAG"]
-          if release_tag.startswith("powercontext-v"):
-              release_version = release_tag.removeprefix("powercontext-v")
-          else:
-              release_version = release_tag.removeprefix("v")
-          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc)[0-9]+)?", release_version):
-              raise SystemExit(
-                  "Release tag must use X.Y.Z with optional aN, bN, or rcN suffix and "
-                  "optional v or powercontext-v prefix (for example, powercontext-v1.1.0)"
-              )
-
-          package_version = subprocess.check_output(
-              ["uvx", "--from", "hatchling", "--with", "hatch-vcs", "hatchling", "version"],
-              text=True,
-          ).strip()
-          if package_version != release_version:
-              raise SystemExit(
-                  f"Release tag version {release_version!r} does not match VCS version {package_version!r}"
-              )
-          PY
-
-      - name: Set up website tools
-        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
-
-      - name: Verify synchronized release references and release notes
-        env:
-          VERSION: ${{ github.event.release.tag_name }}
-        run: make release-check
-
-      - name: Build release distributions
-        run: |
-          uv build --out-dir dist
-          uvx --from twine twine check dist/*
-
-      - name: Upload release distributions
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: release-dists
-          path: dist/*
-          if-no-files-found: error
-          retention-days: 30
+    uses: ./.github/workflows/upgrade-release.yml
+    with:
+      release: true
+      selection: automatic
 
   pypi-publish:
     runs-on: ubuntu-latest
@@ -84,7 +26,7 @@ jobs:
       id-token: write
     steps:
       - name: Download release distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: release-dists
           path: dist/
@@ -100,7 +42,7 @@ jobs:
       contents: write
     steps:
       - name: Download release distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: release-dists
           path: dist/
@@ -142,7 +84,13 @@ jobs:
         uses: ./.github/actions/setup-python-env
 
       - name: Set up website tools
-        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+
+      - name: Cache website dependencies
+        uses: ./.github/actions/cache-pnpm
+        with:
+          working-directory: website
+          cache-dependency-glob: website/pnpm-lock.yaml
 
       - name: Build website
         run: make docs-build
