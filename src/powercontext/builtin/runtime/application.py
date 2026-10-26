@@ -254,6 +254,7 @@ from powercontext.builtin.runtime.recall_sufficiency import (
     build_recall_candidates,
     recall_effort,
 )
+from powercontext.builtin.runtime.source_lifecycle import SourceLifecycleApplication
 from powercontext.builtin.runtime.statistics import RelationalScopedStatistics, overview_selection
 from powercontext.builtin.scope import ScopeApplication, ScopeDescriptor, ScopeSelection
 from powercontext.builtin.scope.subject_sources import SubjectSourceService
@@ -2699,6 +2700,14 @@ class ScopedTopicMemoryApplication:
                     query_embedding,
                     embedding_timeout_seconds,
                 )
+        lifecycle = self._runtime.lifecycle
+        if lifecycle is not None and result.hits:
+            withdrawn = await lifecycle.unavailable_topic_artifacts(self.scope_id)
+            if withdrawn:
+                # Topics without lifecycle support leave retrieval and Context.
+                result = result.model_copy(
+                    update={"hits": tuple(hit for hit in result.hits if hit.artifact_ref.artifact_id not in withdrawn)}
+                )
         observer = self._runtime._topic_memory_search_observer
         if observer is not None:
             try:
@@ -3149,6 +3158,8 @@ class BuiltinRuntime:
         self.remote_skills = RemoteSkillApplication(self)
         self.statistics = StatisticsApplication(self)
         self.handoff_report: HandoffReportApplication | None = None
+        # Bound by composition, which owns the relational database handle.
+        self.lifecycle: SourceLifecycleApplication | None = None
         self.artifact_processing_supervisor: ArtifactProcessingSupervisors | None = None
         self.processor = None if scope_ids is None else ScheduledSourceProcessor(self, scope_ids)
         self.experience_processor = (

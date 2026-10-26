@@ -1180,6 +1180,30 @@ RECURRENCE_OBSERVATION_TABLE = Table(
 
 RECURRENCE_TABLES = (RECURRENCE_MATCH_TABLE, RECURRENCE_OBSERVATION_TABLE)
 
+# Caller-declared evidence dependencies between Sources, Memory entries and
+# Topic Memory revisions. One row per node; derived availability is stored so
+# restarts and native state reconciliation read one consistent view.
+SOURCE_LIFECYCLE_NODES_TABLE = Table(
+    "pc_source_lifecycle_nodes",
+    SHARED_METADATA,
+    Column("scope_id", identity_string(MAX_SCOPE_ID_LENGTH), primary_key=True),
+    Column("node_id", identity_string(MAX_BINDING_NAME_LENGTH), primary_key=True),
+    Column("ordinal", Integer, nullable=False),
+    Column("kind", String(16), nullable=False),
+    Column("reference", _entry_text_type(), nullable=False),
+    Column("parents", _entry_text_type(), nullable=False),
+    Column("policy", String(8)),
+    Column("source_revision", Integer),
+    Column("available", Boolean, nullable=False),
+    Column("native_synced", Boolean, nullable=False),
+    Column("last_sequence", Integer),
+    Column("last_available", Boolean),
+    Column("last_reason", _entry_text_type()),
+    UniqueConstraint("scope_id", "ordinal", name="uq_pc_source_lifecycle_nodes_ordinal"),
+    CheckConstraint("kind IN ('source', 'memory', 'topic')", name="ck_pc_source_lifecycle_nodes_kind"),
+    CheckConstraint("ordinal > 0", name="ck_pc_source_lifecycle_nodes_ordinal_positive"),
+)
+
 BUILTIN_TABLES = (
     SCOPE_TABLES
     + SHARED_TABLES
@@ -1187,5 +1211,5 @@ BUILTIN_TABLES = (
     + MEMORY_TABLES
     + STATISTICS_TABLES
     + RECURRENCE_TABLES
-    + (ARTIFACT_TAGS_TABLE, DREAM_RUNS_TABLE, RECEIPT_MIGRATION_REVIEW_TABLE)
+    + (ARTIFACT_TAGS_TABLE, DREAM_RUNS_TABLE, RECEIPT_MIGRATION_REVIEW_TABLE, SOURCE_LIFECYCLE_NODES_TABLE)
 )
