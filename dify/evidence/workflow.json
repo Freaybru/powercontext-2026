@@ -1,0 +1,155 @@
+{
+  "dify_version": "1.9.1",
+  "powercontext_commit": "d16fb73a3a887e280699f93b4a5d4c1bf6cf6ed0",
+  "execution": "real Dify Workflow API and model service",
+  "simulated": false,
+  "steps": [
+    {
+      "step": 1,
+      "action": "寄存：奶奶在蓝铁盒里藏了一颗橘子糖",
+      "session": "A",
+      "workflow_run_id": "f2b08207-1358-453f-8bad-c4ced17d7bf1",
+      "status": "succeeded",
+      "reply": "客人，这回访里发生了一些令人意想不到的事情。寄存的记忆已经得到了记录，现在我需要知道你接下来要选择什么。请告诉我你的决定，让我为你温暖地祝福。\n\n---\n\n🪔 第 1 周目 · 0/3 次选择\n\n温暖 0 · 脑洞 0\n\n寄存回忆：奶奶在蓝铁盒里藏了一颗橘子糖\n\n口袋道具：空空的\n\n结局收藏：等待点亮\n\n\n\n🔔 会下雨的收银机\n\n收银机吐出一朵乌云，声称有人偷走了星期五。\n\n1. 把一段好回忆借给乌云\n\n2. 给乌云开一张荒诞的罚单\n\n3. 把乌云装进空玻璃瓶\n\n输入 1 / 2 / 3；也可输入「2：你的脑洞补充」。",
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_6a10d3bb21764f30bbdc20c4964b1bec",
+        "revision": 1
+      },
+      "model": {
+        "model": "echo-qwen",
+        "usage": {
+          "completion_tokens": 41,
+          "prompt_tokens": 386,
+          "total_tokens": 427
+        }
+      }
+    },
+    {
+      "step": 2,
+      "action": "1",
+      "session": "A",
+      "workflow_run_id": "45592e23-dc63-4e88-b75f-2ff8a94103e0",
+      "status": "succeeded",
+      "reply": "客人啊，这乌云真是个奇怪的客人，它把星期五都偷走了！不过别担心，我有办法让它的不安平静下来。把它借给乌云吧，或许它会带来一丝晴朗的天气。\n\n---\n\n🪔 第 1 周目 · 1/3 次选择\n\n温暖 2 · 脑洞 0\n\n寄存回忆：奶奶在蓝铁盒里藏了一颗橘子糖\n\n口袋道具：晴天小票\n\n结局收藏：等待点亮\n\n\n\n🔔 倒着走的猫\n\n一只倒着走的猫来退货：它买到的明天太无聊了。\n\n1. 陪它把明天重新过一遍\n\n2. 用昨天的笑话交换明天\n\n3. 把猫请上店长宝座\n\n输入 1 / 2 / 3；也可输入「2：你的脑洞补充」。",
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_6a10d3bb21764f30bbdc20c4964b1bec",
+        "revision": 2
+      },
+      "model": {
+        "model": "echo-qwen",
+        "usage": {
+          "completion_tokens": 51,
+          "prompt_tokens": 382,
+          "total_tokens": 433
+        }
+      }
+    },
+    {
+      "step": 3,
+      "action": "1",
+      "session": "A",
+      "workflow_run_id": "05b8c629-5f46-4708-9954-f454ef88c9c6",
+      "status": "succeeded",
+      "reply": "客人，你见到一只倒着走的猫了吗？它来退货，说它买到的明天太无聊了。来，陪它把明天重新过一遍，它会给你一颗猫爪车票。这可是它最珍贵的回忆哦。\n\n---\n\n🪔 第 1 周目 · 2/3 次选择\n\n温暖 4 · 脑洞 0\n\n寄存回忆：奶奶在蓝铁盒里藏了一颗橘子糖\n\n口袋道具：晴天小票、猫爪车票\n\n结局收藏：等待点亮\n\n\n\n🔔 凌晨零点的门\n\n杂货铺长出第三扇门。门后的人用你的回忆敲门。\n\n1. 带着回忆推开门\n\n2. 先讲一个离谱故事再开门\n\n3. 把门改造成一扇窗\n\n输入 1 / 2 / 3；也可输入「2：你的脑洞补充」。",
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_6a10d3bb21764f30bbdc20c4964b1bec",
+        "revision": 3
+      },
+      "model": {
+        "model": "echo-qwen",
+        "usage": {
+          "completion_tokens": 54,
+          "prompt_tokens": 411,
+          "total_tokens": 465
+        }
+      }
+    },
+    {
+      "step": 4,
+      "action": "1",
+      "session": "A",
+      "workflow_run_id": "84a9b403-25dc-4bd9-a460-a72f3a17adde",
+      "status": "succeeded",
+      "reply": "杂货铺长出第三扇门，门后的人用你的回忆敲门。我必须带着回忆推开门。得到回声钥匙，灯火守夜人！\n\n---\n\n🪔 第 1 周目 · 3/3 次选择\n\n温暖 6 · 脑洞 0\n\n寄存回忆：奶奶在蓝铁盒里藏了一颗橘子糖\n\n口袋道具：晴天小票、猫爪车票、回声钥匙\n\n结局收藏：灯火守夜人\n\n\n\n这一夜打烊了。输入「新周目」再次挑战，或「回访」与店长叙旧。",
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_6a10d3bb21764f30bbdc20c4964b1bec",
+        "revision": 4
+      },
+      "model": {
+        "model": "echo-qwen",
+        "usage": {
+          "completion_tokens": 36,
+          "prompt_tokens": 446,
+          "total_tokens": 482
+        }
+      }
+    },
+    {
+      "step": 5,
+      "action": "回访",
+      "session": "B",
+      "workflow_run_id": "3e5ac6c9-9799-4a18-98fc-0643c9d0cf54",
+      "status": "succeeded",
+      "reply": "欢迎回来，客人。翻开这本记忆账本，我们能一起回忆起那些不被外界看到的瞬间。奶奶在蓝铁盒里藏了一颗橘子糖，下次见面时，我们可以分享这份特别的记忆。\n\n---\n\n🪔 第 1 周目 · 3/3 次选择\n\n温暖 6 · 脑洞 0\n\n寄存回忆：奶奶在蓝铁盒里藏了一颗橘子糖\n\n口袋道具：晴天小票、猫爪车票、回声钥匙\n\n结局收藏：灯火守夜人\n\n\n\n这一夜打烊了。输入「新周目」再次挑战，或「回访」与店长叙旧。",
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_6a10d3bb21764f30bbdc20c4964b1bec",
+        "revision": 4
+      },
+      "model": {
+        "model": "echo-qwen",
+        "usage": {
+          "completion_tokens": 49,
+          "prompt_tokens": 444,
+          "total_tokens": 493
+        }
+      }
+    },
+    {
+      "step": 6,
+      "action": "新周目",
+      "session": "B",
+      "workflow_run_id": "ed7257b6-1038-44d3-be77-775c413b8389",
+      "status": "succeeded",
+      "reply": "阿回：（翻开新一页账本）新的一周，新的故事。阿回在这里，愿你的记忆在回声杂货铺永远不消失。\n\n---\n\n🪔 第 2 周目 · 0/3 次选择\n\n温暖 0 · 脑洞 0\n\n寄存回忆：奶奶在蓝铁盒里藏了一颗橘子糖\n\n口袋道具：空空的\n\n结局收藏：灯火守夜人\n\n\n\n🔔 会下雨的收银机\n\n收银机吐出一朵乌云，声称有人偷走了星期五。\n\n1. 把一段好回忆借给乌云\n\n2. 给乌云开一张荒诞的罚单\n\n3. 把乌云装进空玻璃瓶\n\n输入 1 / 2 / 3；也可输入「2：你的脑洞补充」。",
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_6a10d3bb21764f30bbdc20c4964b1bec",
+        "revision": 5
+      },
+      "model": {
+        "model": "echo-qwen",
+        "usage": {
+          "completion_tokens": 34,
+          "prompt_tokens": 460,
+          "total_tokens": 494
+        }
+      }
+    },
+    {
+      "step": 7,
+      "action": "回访",
+      "session": "B",
+      "workflow_run_id": "227f256a-6a16-4d79-97ee-c0ab725c53b9",
+      "status": "succeeded",
+      "reply": "客人啊，欢迎你再次光临回声杂货铺。你的眼睛告诉我，你记住了旧事。奶奶在蓝铁盒里藏了一颗橘子糖，那是你童年的温暖回忆。愿这股暖流能为你的旅程增添一份慰藉。\n\n---\n\n🪔 第 2 周目 · 0/3 次选择\n\n温暖 0 · 脑洞 0\n\n寄存回忆：奶奶在蓝铁盒里藏了一颗橘子糖\n\n口袋道具：空空的\n\n结局收藏：灯火守夜人\n\n\n\n🔔 会下雨的收银机\n\n收银机吐出一朵乌云，声称有人偷走了星期五。\n\n1. 把一段好回忆借给乌云\n\n2. 给乌云开一张荒诞的罚单\n\n3. 把乌云装进空玻璃瓶\n\n输入 1 / 2 / 3；也可输入「2：你的脑洞补充」。",
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_6a10d3bb21764f30bbdc20c4964b1bec",
+        "revision": 5
+      },
+      "model": {
+        "model": "echo-qwen",
+        "usage": {
+          "completion_tokens": 59,
+          "prompt_tokens": 362,
+          "total_tokens": 421
+        }
+      }
+    }
+  ]
+}

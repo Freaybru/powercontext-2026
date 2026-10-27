@@ -1,0 +1,2 @@
+# Preserve release source bytes across platforms for reproducible packaging.
+* -text

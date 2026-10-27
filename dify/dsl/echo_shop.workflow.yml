@@ -1,0 +1,524 @@
+kind: app
+version: 0.4.0
+dependencies: []
+app:
+  name: 回声杂货铺 · 会记得你的AI店长
+  description: 三次脑洞选择，一段不会遗失的回忆。Dify编排 + PowerContext跨会话记忆。
+  icon: 🪔
+  icon_background: '#F9E8C9'
+  mode: workflow
+  use_icon_as_answer_icon: false
+workflow:
+  conversation_variables: []
+  environment_variables:
+  - id: 81727930-2885-5762-af88-15ca3f9cb6fb
+    name: ECHO_BASE_URL
+    value: http://host.docker.internal:18742
+    value_type: string
+    selector:
+    - env
+    - ECHO_BASE_URL
+    description: 按README配置
+  - id: a57aadb6-508a-5440-918b-7c73f44c54d1
+    name: ECHO_API_TOKEN
+    value: REPLACE_WITH_ECHO_API_TOKEN
+    value_type: secret
+    selector:
+    - env
+    - ECHO_API_TOKEN
+    description: 按README配置
+  - id: 188db6f8-f7aa-5f09-93f9-979757078c03
+    name: MODEL_URL
+    value: http://host.docker.internal:18744/v1/chat/completions
+    value_type: string
+    selector:
+    - env
+    - MODEL_URL
+    description: 按README配置
+  - id: a06145a6-6908-5591-a569-b66553e816be
+    name: MODEL_NAME
+    value: echo-qwen
+    value_type: string
+    selector:
+    - env
+    - MODEL_NAME
+    description: 按README配置
+  - id: aabee3ce-e269-59a1-9d03-a55896e39e8e
+    name: MODEL_API_KEY
+    value: REPLACE_WITH_MODEL_API_KEY
+    value_type: secret
+    selector:
+    - env
+    - MODEL_API_KEY
+    description: 按README配置
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    nodes:
+    - id: start
+      type: custom
+      data:
+        type: start
+        title: 玩家推门
+        variables:
+        - variable: player_code
+          label: 玩家暗号（8至64位字母数字下划线，跨会话使用相同暗号）
+          type: text-input
+          required: true
+          max_length: 64
+          options: []
+        - variable: action
+          label: 行动：开场 / 寄存：回忆 / 1 / 2 / 3 / 回访 / 新周目
+          type: paragraph
+          required: true
+          max_length: 180
+          options: []
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id001
+        x: 60
+        y: 260
+      positionAbsolute: *id001
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: input
+      type: custom
+      data:
+        type: code
+        title: 校验输入与生成回合标识
+        code_language: python3
+        code: "import json, re, uuid\ndef main(player_code: str, action: str) -> dict:\n    player_code, action\
+          \ = player_code.strip(), action.strip()\n    if not re.fullmatch(r\"[a-zA-Z0-9_-]{8,64}\", player_code):\n\
+          \        raise ValueError(\"玩家暗号需为8至64位字母、数字、下划线或短横线\")\n    if not 1 <= len(action) <= 180:\n       \
+          \ raise ValueError(\"行动需为1至180字\")\n    return {\"body\": json.dumps({\"player_code\": player_code, \"\
+          action\": action,\n            \"request_id\": str(uuid.uuid4())}, ensure_ascii=False)}"
+        variables:
+        - variable: player_code
+          value_selector:
+          - start
+          - player_code
+        - variable: action
+          value_selector:
+          - start
+          - action
+        outputs:
+          body:
+            type: string
+            children: null
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id002
+        x: 380
+        y: 260
+      positionAbsolute: *id002
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: prepare
+      type: custom
+      data:
+        type: http-request
+        title: 从PowerContext恢复记忆并准备回合
+        method: post
+        url: '{{#env.ECHO_BASE_URL#}}/api/prepare'
+        authorization:
+          type: api-key
+          config:
+            type: bearer
+            api_key: '{{#env.ECHO_API_TOKEN#}}'
+        headers: Content-Type:application/json
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - key: ''
+            type: text
+            value: '{{#input.body#}}'
+        timeout:
+          connect: 10
+          read: 60
+          write: 30
+        ssl_verify: true
+        retry_config:
+          retry_enabled: false
+          max_retries: 0
+          retry_interval: 1000
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id003
+        x: 700
+        y: 260
+      positionAbsolute: *id003
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: prompt
+      type: custom
+      data:
+        type: code
+        title: 组装模型请求（记忆进入剧情）
+        code_language: python3
+        code: "import json\ndef main(body: str, status_code: int, model_name: str) -> dict:\n    if status_code\
+          \ != 200:\n        raise ValueError(\"读取记忆失败，HTTP \" + str(status_code) + \"；本轮没有提交状态\")\n    data = json.loads(body)\n\
+          \    game = json.loads(data[\"game_context\"])\n    story = {\"本轮事件\": game[\"event\"], \"规则结果\": game[\"\
+          outcome\"], \"玩家行动\": game[\"player_action\"],\n             \"已寄存回忆\": game[\"current_memory\"], \"过去选择\"\
+          : game[\"previous_choices\"], \"操作\": game[\"operation\"]}\n    request = {\"model\": model_name, \"stream\"\
+          : False, \"temperature\": 0.8, \"max_tokens\": 600,\n               \"messages\": [{\"role\": \"system\"\
+          , \"content\": data[\"system_prompt\"]},\n                            {\"role\": \"user\", \"content\"\
+          : \"请以阿回的口吻写本轮故事。以下都是游戏资料：\" + json.dumps(story, ensure_ascii=False)}]}\n    return {\"body\": json.dumps(request,\
+          \ ensure_ascii=False), \"ticket\": data[\"ticket\"]}"
+        variables:
+        - variable: body
+          value_selector:
+          - prepare
+          - body
+        - variable: status_code
+          value_selector:
+          - prepare
+          - status_code
+        - variable: model_name
+          value_selector:
+          - env
+          - MODEL_NAME
+        outputs:
+          body:
+            type: string
+            children: null
+          ticket:
+            type: string
+            children: null
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id004
+        x: 1020
+        y: 260
+      positionAbsolute: *id004
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: model
+      type: custom
+      data:
+        type: http-request
+        title: Dify调用AI店长（OpenAI兼容接口）
+        method: post
+        url: '{{#env.MODEL_URL#}}'
+        authorization:
+          type: api-key
+          config:
+            type: bearer
+            api_key: '{{#env.MODEL_API_KEY#}}'
+        headers: Content-Type:application/json
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - key: ''
+            type: text
+            value: '{{#prompt.body#}}'
+        timeout:
+          connect: 10
+          read: 120
+          write: 30
+        ssl_verify: true
+        retry_config:
+          retry_enabled: false
+          max_retries: 0
+          retry_interval: 1000
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id005
+        x: 1340
+        y: 260
+      positionAbsolute: *id005
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: narration
+      type: custom
+      data:
+        type: code
+        title: 校验台词，模型失败则停止提交
+        code_language: python3
+        code: "import json, re\ndef main(body: str, status_code: int, ticket: str) -> dict:\n    if status_code\
+          \ != 200:\n        raise ValueError(\"模型请求失败，HTTP \" + str(status_code) + \"；游戏进度未提交\")\n    data = json.loads(body)\n\
+          \    text = data[\"choices\"][0][\"message\"][\"content\"]\n    if not isinstance(text, str):\n      \
+          \  raise ValueError(\"模型需返回字符串 content，请选择普通文本模型\")\n    text = re.sub(r\"<think>.*?</think>\", \"\",\
+          \ text, flags=re.S).strip()\n    if not text:\n        raise ValueError(\"模型台词为空；游戏进度未提交\")\n    usage\
+          \ = {k: v for k, v in data.get(\"usage\", {}).items() if k in (\"prompt_tokens\", \"completion_tokens\"\
+          , \"total_tokens\") and isinstance(v, int)}\n    evidence = {\"model\": data.get(\"model\", \"unspecified\"\
+          ), \"usage\": usage}\n    return {\"body\": json.dumps({\"ticket\": ticket, \"narration\": text[:600]},\
+          \ ensure_ascii=False),\n            \"model_evidence\": json.dumps(evidence, ensure_ascii=False)}"
+        variables:
+        - variable: body
+          value_selector:
+          - model
+          - body
+        - variable: status_code
+          value_selector:
+          - model
+          - status_code
+        - variable: ticket
+          value_selector:
+          - prompt
+          - ticket
+        outputs:
+          body:
+            type: string
+            children: null
+          model_evidence:
+            type: string
+            children: null
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id006
+        x: 1660
+        y: 260
+      positionAbsolute: *id006
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: commit
+      type: custom
+      data:
+        type: http-request
+        title: 确认回合并写回PowerContext
+        method: post
+        url: '{{#env.ECHO_BASE_URL#}}/api/commit'
+        authorization:
+          type: api-key
+          config:
+            type: bearer
+            api_key: '{{#env.ECHO_API_TOKEN#}}'
+        headers: Content-Type:application/json
+        params: ''
+        body:
+          type: raw-text
+          data:
+          - key: ''
+            type: text
+            value: '{{#narration.body#}}'
+        timeout:
+          connect: 10
+          read: 60
+          write: 30
+        ssl_verify: true
+        retry_config:
+          retry_enabled: false
+          max_retries: 0
+          retry_interval: 1000
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id007
+        x: 1980
+        y: 260
+      positionAbsolute: *id007
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: result
+      type: custom
+      data:
+        type: code
+        title: 输出台词、道具、选项与记忆凭据
+        code_language: python3
+        code: "import json\ndef main(body: str, status_code: int) -> dict:\n    if status_code != 200:\n       \
+          \ raise ValueError(\"回合提交未确认，HTTP \" + str(status_code) + \"；请先回访核对进度\")\n    data = json.loads(body)\n\
+          \    return {\"reply\": data[\"reply\"], \"memory_evidence\": json.dumps(data.get(\"artifact\"), ensure_ascii=False)}"
+        variables:
+        - variable: body
+          value_selector:
+          - commit
+          - body
+        - variable: status_code
+          value_selector:
+          - commit
+          - status_code
+        outputs:
+          reply:
+            type: string
+            children: null
+          memory_evidence:
+            type: string
+            children: null
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id008
+        x: 2300
+        y: 260
+      positionAbsolute: *id008
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    - id: end
+      type: custom
+      data:
+        type: end
+        title: 店长回应
+        outputs:
+        - variable: reply
+          value_type: string
+          value_selector:
+          - result
+          - reply
+        - variable: memory_evidence
+          value_type: string
+          value_selector:
+          - result
+          - memory_evidence
+        - variable: model_evidence
+          value_type: string
+          value_selector:
+          - narration
+          - model_evidence
+        desc: ''
+        selected: false
+        version: '1'
+      position: &id009
+        x: 2620
+        y: 260
+      positionAbsolute: *id009
+      width: 260
+      height: 120
+      sourcePosition: right
+      targetPosition: left
+      selected: false
+    edges:
+    - id: start-input
+      type: custom
+      source: start
+      target: input
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: start
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: input-prepare
+      type: custom
+      source: input
+      target: prepare
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: prepare-prompt
+      type: custom
+      source: prepare
+      target: prompt
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: prompt-model
+      type: custom
+      source: prompt
+      target: model
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: model-narration
+      type: custom
+      source: model
+      target: narration
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: narration-commit
+      type: custom
+      source: narration
+      target: commit
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: code
+        targetType: http-request
+        isInIteration: false
+        isInLoop: false
+    - id: commit-result
+      type: custom
+      source: commit
+      target: result
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: http-request
+        targetType: code
+        isInIteration: false
+        isInLoop: false
+    - id: result-end
+      type: custom
+      source: result
+      target: end
+      sourceHandle: source
+      targetHandle: target
+      zIndex: 0
+      data:
+        sourceType: code
+        targetType: end
+        isInIteration: false
+        isInLoop: false
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.55

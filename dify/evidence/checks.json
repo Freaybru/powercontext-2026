@@ -1,0 +1,134 @@
+{
+  "dify_version": "1.9.1",
+  "checks": [
+    {
+      "name": "real_dify_nodes",
+      "status": "passed",
+      "nodes": [
+        {
+          "node_id": "start",
+          "node_type": "start",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "input",
+          "node_type": "code",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "prepare",
+          "node_type": "http-request",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "prompt",
+          "node_type": "code",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "model",
+          "node_type": "http-request",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "narration",
+          "node_type": "code",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "commit",
+          "node_type": "http-request",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "result",
+          "node_type": "code",
+          "status": "succeeded"
+        },
+        {
+          "node_id": "end",
+          "node_type": "end",
+          "status": "succeeded"
+        }
+      ]
+    },
+    {
+      "name": "ending_2",
+      "status": "passed",
+      "ending": "宇宙整活王",
+      "workflow_runs": [
+        "34b51689-de98-480c-b08e-ad4a5cc22a1c",
+        "b4fe610c-4eb2-4eef-b2bb-e562a483f1ed",
+        "7703625d-477d-4bce-943a-bef2021a5236"
+      ],
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_bcd87ded7ebd49108a4a73205c803d70",
+        "revision": 3
+      }
+    },
+    {
+      "name": "ending_3",
+      "status": "passed",
+      "ending": "月光合伙人",
+      "workflow_runs": [
+        "524e55f6-6f4a-4eb3-8821-7918e9d1ffc7",
+        "8c88f825-fff4-4469-8651-0228663ede28",
+        "4108f973-442f-4b9c-9c3a-6b05c7b8c63f"
+      ],
+      "memory": {
+        "family": "atomic-memory",
+        "artifact_id": "art_db63cc9ddd6a48008e561bf807a6aaee",
+        "revision": 3
+      }
+    },
+    {
+      "name": "player_isolation",
+      "status": "passed",
+      "workflow_run": "01664de0-5250-411a-bf2c-99020aed67db",
+      "memory": null
+    },
+    {
+      "name": "model_failure_does_not_commit",
+      "status": "passed",
+      "failed_workflow_run": "22dd3fc4-9ce8-467a-ab92-f575c0319292",
+      "verification_workflow_run": "16195e8e-5281-45c3-b716-bb476b6a7e3b",
+      "memory_before": {
+        "family": "atomic-memory",
+        "artifact_id": "art_c375ea3b76584f8795bd8148220fda1d",
+        "revision": 1
+      },
+      "memory_after": {
+        "family": "atomic-memory",
+        "artifact_id": "art_c375ea3b76584f8795bd8148220fda1d",
+        "revision": 1
+      }
+    },
+    {
+      "name": "real_dify_after_process_restart",
+      "status": "passed",
+      "workflow_before": "87f92780-2406-444f-8a6a-29b76ed4d220",
+      "workflow_after": "163bfced-f2cf-4927-9a64-144ccd2e188f",
+      "memory_before": {
+        "family": "atomic-memory",
+        "artifact_id": "art_d8c9557c1d8242e6a22b06f447df331f",
+        "revision": 1
+      },
+      "memory_after": {
+        "family": "atomic-memory",
+        "artifact_id": "art_d8c9557c1d8242e6a22b06f447df331f",
+        "revision": 1
+      },
+      "both_services_stopped_before_restart": true,
+      "launcher_health_check": true
+    }
+  ],
+  "model": {
+    "repository": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+    "revision": "91cad51170dc346986eccefdc2dd33a9da36ead9",
+    "weights_sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+    "runtime": "llama.cpp b11929",
+    "api_authentication": true,
+    "simulated": false
+  }
+}

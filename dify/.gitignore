@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+.venv/
+.cache/
+.tmp/
+.runtime/
+__pycache__/
+*.pyc
+evidence/private/
