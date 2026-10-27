@@ -485,6 +485,11 @@ def _document_match(document_id: str, words: list[str], phrases: set[str]) -> tu
             company_score = 3
         elif len(company[0]) >= 3 and company[0] in phrases:
             company_score = 2
+        elif len(company) >= 2 and any(
+            len(word) >= 3 and word not in _STOPWORDS and word.replace("n", "") == "".join(part[0] for part in company)
+            for word in words
+        ):
+            company_score = 1  # an initialism such as JnJ for Johnson & Johnson
         elif any(
             len(phrase) >= 4 and name.startswith(phrase) and 5 * len(phrase) >= 3 * len(name) for phrase in phrases
         ) or any(len(word) >= 3 and word not in _STOPWORDS and name.startswith(word) for word in words):
@@ -601,6 +606,145 @@ def _score_pages(
     return scores
 
 
+# --- Financial statements -------------------------------------------------------------------
+# Ratio and metric questions are answered from the primary statements. Those pages carry few
+# question words, so lexical ranking buries them. They are recognised by structure (title at the
+# top of a number-dense page) and kept in the result when the question's metrics need them.
+
+# Titles are matched with all whitespace removed because PDF extraction often splits words
+# ("Balance Shee t").
+_STATEMENT_TITLES = (
+    ("cash", re.compile(
+        r"(?:statements?of(?:consolidated)?cashflows?|cashflows?statements?)(?!data|information|reconciliation)")),
+    ("balance", re.compile(
+        r"(?:balancesheets?|statements?of(?:consolidated)?financial(?:position|condition))(?!data|information)")),
+    ("income", re.compile(
+        r"(?:statements?of(?:consolidated)?(?:income|operations|earnings|profit|comprehensive(?:income|loss|earnings))"
+        r"|incomestatements?)(?!data|information|location)")),
+)
+_STATEMENT_LEAD = re.compile(r"^(?:(?:t\s?able\s+of\s+contents|annual\s+report|page|\d+|[|\-\u2013\u2014.])\s*)+")
+_STATEMENT_NOT_PRIMARY = re.compile(
+    r"notesto|notes?\d|reportof|supplemental|guarantee|schedule[iv]+|parent(?:company|only)|registrant|selected|quarterly"
+)
+_STATEMENT_MIN_NUMERIC_SHARE = 0.22
+_STATEMENT_TITLE_WINDOW = 200
+_STATEMENT_INDEX_WINDOW = 700
+_STATEMENT_CANDIDATES_PER_KIND = 4
+_STATEMENT_MAX_SPREAD = 8
+_STATEMENT_NEEDS = (
+    ("income", re.compile(
+        r"revenue|\bsales\b|margin|profit|income|earnings|\beps\b|cogs|cost of (?:goods|sales|revenue)|expenses?"
+        r"|\bebit|tax rate|capital[- ]intensi|\bdpo\b|\bdso\b|\bdio\b|turnover|return on|\broa\b|\broe\b|per share")),
+    ("balance", re.compile(
+        r"\bassets?\b|liabilit|equity|\bdebt|borrowing|receivable|payable|inventor|working capital|quick ratio"
+        r"|current ratio|liquidity|leverage|goodwill|\bppn?e\b|property|plant|book value|\bdpo\b|\bdso\b|\bdio\b"
+        r"|turnover|return on (?:assets|equity)|\broa\b|\broe\b|capital[- ]intensi|cash and cash equivalents|solvency")),
+    ("cash", re.compile(
+        r"cash flows?|capex|capital expenditure|free cash|\bfcf\b|operating activities|investing|financing"
+        r"|dividend|repurchase|buyback|depreciation|amortization|d&a|capital[- ]intensi|purchases? of property")),
+)
+_STATEMENT_ORDER = ("income", "balance", "cash")
+
+
+def _statement_kind(text: str) -> tuple[str, bool] | None:
+    """Return (kind, is_comprehensive) when ``text`` is a primary financial statement page."""
+
+    body = _STATEMENT_LEAD.sub("", " ".join(text.casefold().split()))
+    tokens = _terms(body)
+    if len(tokens) < 20 or sum(token.isdigit() for token in tokens) / len(tokens) < _STATEMENT_MIN_NUMERIC_SHARE:
+        return None
+    squished = re.sub(r"\s+", "", body[:_STATEMENT_INDEX_WINDOW])
+    # A table of contents lists several statement titles; a statement shows only its own.
+    if sum(len(pattern.findall(squished)) for _, pattern in _STATEMENT_TITLES) > 2:
+        return None
+    window = squished[:_STATEMENT_TITLE_WINDOW]
+    for kind, pattern in _STATEMENT_TITLES:
+        match = pattern.search(window)
+        if match and not _STATEMENT_NOT_PRIMARY.search(window[: match.start()]):
+            return kind, "comprehensive" in match.group(0)
+    return None
+
+
+def _needed_statements(question: str) -> list[str]:
+    lowered = question.casefold()
+    return [kind for kind, pattern in _STATEMENT_NEEDS if pattern.search(lowered)]
+
+
+def _primary_statement_pages(candidates: dict[str, list[tuple[bool, int, str]]]) -> dict[str, str]:
+    """Pick one page per statement kind; the primary statements sit next to each other.
+
+    ``candidates`` maps a kind to (is_comprehensive, page position, key) tuples.
+    """
+
+    present = [kind for kind in _STATEMENT_ORDER if candidates.get(kind)]
+    options = [sorted(candidates[kind])[:_STATEMENT_CANDIDATES_PER_KIND] for kind in present]
+    best: tuple[tuple[bool, int, int], tuple[tuple[bool, int, str], ...]] | None = None
+
+    def search(index: int, chosen: tuple[tuple[bool, int, str], ...]) -> None:
+        nonlocal best
+        if index == len(options):
+            positions = [item[1] for item in chosen]
+            spread = max(positions) - min(positions)
+            rank = ((spread > _STATEMENT_MAX_SPREAD, sum(item[0] for item in chosen), spread), chosen)
+            if best is None or rank < best:
+                best = rank
+            return
+        for option in options[index]:
+            search(index + 1, (*chosen, option))
+
+    if not options:
+        return {}
+    search(0, ())
+    assert best is not None
+    return {kind: item[2] for kind, item in zip(present, best[1], strict=True)}
+
+
+async def _with_statement_pages(
+    ordered: list[str],
+    pool: dict[str, Any],
+    targets: list[str],
+    needed: list[str],
+    limit: int,
+    page_of: Any,
+) -> list[str]:
+    """Make sure the primary statements the question's metrics need are among the first results."""
+
+    reserved: list[str] = []
+    for document in targets:
+        found: dict[str, list[tuple[bool, str]]] = {}
+        for key, hit in pool.items():
+            if _document_line(hit.text) != document:
+                continue
+            kind = _statement_kind(hit.text.split("\n", 1)[1] if "\n" in hit.text else "")
+            if kind is not None and kind[0] in needed:
+                found.setdefault(kind[0], []).append((kind[1], key))
+        if not found:
+            continue
+        candidates: dict[str, list[tuple[bool, int, str]]] = {}
+        ambiguous = any(len(items) > 1 for items in found.values())
+        for kind, items in found.items():
+            for comprehensive, key in sorted(items)[:_STATEMENT_CANDIDATES_PER_KIND]:
+                position = await page_of(key) if ambiguous else 0
+                if position is not None:
+                    candidates.setdefault(kind, []).append((comprehensive, position, key))
+        chosen = _primary_statement_pages(candidates)
+        reserved.extend(chosen[kind] for kind in _STATEMENT_ORDER if kind in chosen)
+    reserved = list(dict.fromkeys(reserved))
+    window = ordered[:limit]
+    missing = [key for key in reserved if key not in window]
+    if not missing:
+        return ordered
+    # The statements the ranking already found keep their place; the lowest-ranked results make room.
+    rest = [key for key in ordered if key not in reserved]
+    room = max(0, limit - len([key for key in window if key in reserved]) - len(missing))
+    head = rest[:room]
+    split = min(len(head), 3)
+    result = head[:split] + missing + head[split:]
+    result += [key for key in window if key in reserved and key not in result]
+    seen = set(result)
+    return result + [key for key in ordered if key not in seen]
+
+
 async def search_pdf_pages(memory: Any, question: str, limit: int = 10) -> tuple[Any, ...]:
     """Return at most ``limit`` citations of distinct PDF pages relevant to ``question``.
 
@@ -709,7 +853,19 @@ async def search_pdf_pages(memory: Any, question: str, limit: int = 10) -> tuple
             collection_size=max(len(candidates), 4 * _PER_QUERY_LIMIT),
         )
 
+    async def page_of(key: str) -> int | None:
+        hit = pool[key]
+        citation = MemoryCitation(memory_ref=hit.memory_ref, entry_id=hit.entry_id, entry_version_id=hit.entry_version_id)
+        try:
+            entry = (await memory.get(GetMemoryEntryRequest(citation=citation))).entry
+            return int(entry.sources[0].source_id.rsplit(":", 1)[1])
+        except Exception:
+            return None
+
     ordered = sorted(scores, key=lambda key: (-scores[key], key))
+    needed = _needed_statements(question) if best_company > 0 else []
+    if needed and targets:
+        ordered = await _with_statement_pages(ordered, pool, targets, needed, limit, page_of)
     citations: list[Any] = []
     cited_pages: set[str] = set()
     for key in ordered:
